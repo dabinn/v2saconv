@@ -30,7 +30,7 @@ void ConvertYDR(char *filepath)
 	char dffpath[MAX_PATH];
 	strcpy(dffpath, filepath);
 	//model_converter::convert_ydr_to_dff(filepath, dffpath, modelName);
-	model_converter::convert_ydr_to_txt(filepath, dffpath, modelName);
+	model_converter::convert_ydr_to_obj(filepath, dffpath, modelName);
 }
 
 void ConvertYDD(char *filepath)
