@@ -2,7 +2,7 @@
 #include <Windows.h>
 #include <stdio.h>
 #include "Math.h"
-#include "zlib\zlib.h"
+#include <zlib.h>
 #include <new>
 #include <set>
 

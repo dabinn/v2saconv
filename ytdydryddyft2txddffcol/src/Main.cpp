@@ -63,7 +63,7 @@ void ConvertYFT(char *filepath)
 
 int main(int argc, char *argv[])
 {
-	SetConsoleTitle("YTDYDRYDDYFT2TXDDFFCOL");
+	SetConsoleTitle("YTDYDRYDDYFT2OBJ");
 	if(settings.m_bEnableLog)
 		LOG_OPEN();
 	

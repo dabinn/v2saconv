@@ -1,0 +1,4 @@
+[submodule "zlib-win-build"]
+	path = zlib-win-build
+	url = https://github.com/kiyolee/zlib-win-build.git
+	branch = master
