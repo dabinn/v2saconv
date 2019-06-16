@@ -13,18 +13,20 @@
   <PropertyGroup Label="Globals">
     <ProjectGuid>{B6B89457-A2EC-4B9C-B27A-9912AEED8F70}</ProjectGuid>
     <RootNamespace>ytdydryddyft2txddffcol</RootNamespace>
+    <ProjectName>ytdydryddyft2obj</ProjectName>
+    <WindowsTargetPlatformVersion>8.1</WindowsTargetPlatformVersion>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
-    <PlatformToolset>v120_xp</PlatformToolset>
+    <PlatformToolset>v140_xp</PlatformToolset>
     <CharacterSet>MultiByte</CharacterSet>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
     <ConfigurationType>Application</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
-    <PlatformToolset>v120_xp</PlatformToolset>
+    <PlatformToolset>v140_xp</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>MultiByte</CharacterSet>
   </PropertyGroup>
@@ -39,12 +41,12 @@
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
-    <OutDir>$(ProjectDir)../output/$(Platform)_$(Configuration)_2013_xp/</OutDir>
-    <IntDir>$(ProjectDir)../obj/$(ProjectName)/$(Platform)_$(Configuration)_2013_xp/</IntDir>
+    <OutDir>$(ProjectDir)../output/$(Platform)_$(Configuration)_$(PlatformToolset)/</OutDir>
+    <IntDir>$(ProjectDir)../obj/$(ProjectName)/$(Platform)_$(Configuration)_$(PlatformToolset)/</IntDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
-    <IntDir>$(ProjectDir)../obj/$(ProjectName)/$(Platform)_$(Configuration)_2013_xp/</IntDir>
-    <OutDir>$(ProjectDir)../output/$(Platform)_$(Configuration)_2013_xp/</OutDir>
+    <IntDir>$(ProjectDir)../obj/$(ProjectName)/$(Platform)_$(Configuration)_$(PlatformToolset)/</IntDir>
+    <OutDir>$(ProjectDir)../output/$(Platform)_$(Configuration)_$(PlatformToolset)/</OutDir>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
@@ -67,6 +69,7 @@
       <SDLCheck>true</SDLCheck>
       <AdditionalIncludeDirectories>$(ProjectDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>_CRT_SECURE_NO_DEPRECATE;_CRT_NONSTDC_NO_DEPRECATE;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
     </ClCompile>
     <Link>
       <GenerateDebugInformation>false</GenerateDebugInformation>
