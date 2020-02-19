@@ -13,6 +13,8 @@
 #include "VehicleConverter.h"
 #include <new>
 #include <vector>
+#include <iostream>
+#include <fstream>
 
 using namespace std;
 
@@ -1016,11 +1018,541 @@ public:
 		return result;
 	}
 
+	static bool drawable_to_obj(Drawable *drawable, char *dstpath, char *modelname)
+	{
+		unsigned int i, j, k, modelcount = 0;
+		bool result = true;
+		char tmp[200];
+		ofstream fichier;
+
+		LOGL("drawable_to_obj");
+		
+
+		vector<Model *> models;
+		for (i = 0; i < 3; i++)
+		{
+			if (drawable->m_pModelCollection[i])
+			{
+				for (j = 0; j < 3; j++)
+				{
+					if (drawable->m_pModelCollection[i]->m_pData[j])
+					{
+						if (modelcount < 2)
+						{
+							modelcount++;
+							models.push_back(drawable->m_pModelCollection[i]->m_pData[j]);
+						}
+					}
+				}
+			}
+		}
+
+		unsigned int vertCounter = 0;
+		unsigned int indexCount = 0;
+		unsigned int meshCounter = 0;
+		unsigned int triCount = 0;
+
+		fichier.open("mat.mtl");
+
+		ShaderGroup& shaderGroup = *drawable->m_pShaderGroup;
+		char **matlist=NULL;
+		matlist = (char**)calloc(shaderGroup.m_shaders.m_wCount, sizeof(char**));
+
+		if (shaderGroup.m_shaders.m_pData && shaderGroup.m_shaders.m_wCount > 0)
+		{
+			for (int mat = 0; mat < shaderGroup.m_shaders.m_wCount; mat++)
+			{
+				Shader &shader = *shaderGroup.m_shaders.m_pData[mat];
+				DWORD *hashes = (DWORD *)((DWORD)shader.m_pParams + shader.m_wParamsDataSize);
+				// Собираем информацию для материала
+				material_info matInfo;
+				for (int param = 0; param < shader.m_nParamsCount; param++)
+				{
+					if (shader.m_pParams[param].m_pData)
+					{
+						// Текстура
+						if (!shader.m_pParams[param].m_nDataType)
+						{
+							Texture *texture = (Texture *)shader.m_pParams[param].m_pData;
+							// Диффуз
+							if (!matInfo.pDiffuse && is_diffuse_sampler(hashes[param]))
+							{
+								if (texture->m_pszName && texture->m_pszName[0] != '\0')
+									matInfo.pDiffuse = &shader.m_pParams[param];
+							}
+							// Нормал
+							if (!matInfo.pNormal && is_normalmap_sampler(hashes[param]))
+							{
+								if (texture->m_pszName && texture->m_pszName[0] != '\0')
+									matInfo.pNormal = &shader.m_pParams[param];
+							}
+						}
+						else
+						{
+							// Цвет
+							if (!matInfo.pCarCol && hashes[param] == HASH("matDiffuseColor"))
+							{
+								Vector4 *carColor = (Vector4 *)shader.m_pParams[param].m_pData;
+								if (carColor->x == 2.0f)
+									matInfo.pCarCol = &shader.m_pParams[param];
+							}
+							// Свечение
+							else if (!matInfo.pEmissive && hashes[param] == HASH("emissiveMultiplier"))
+							{
+								matInfo.pEmissive = &shader.m_pParams[param];
+							}
+						}
+					}
+				}
+				fichier << "newmtl " << shader.m_dwNameHash << "-"<< shader.m_dwSpsNameHash<<"\n";
+
+				if (matInfo.pDiffuse)
+				{
+					Texture *texture = (Texture *)matInfo.pDiffuse->m_pData;
+					fichier << "\tmap_Ka " << texture->m_pszName << "\n";
+					matlist[mat] = (char *)malloc(strlen(texture->m_pszName)+1);
+					strcpy(matlist[mat], texture->m_pszName);
+
+				}
+
+				if (matInfo.pCarCol)
+				{
+					Vector4 *carColor = (Vector4 *)matInfo.pCarCol->m_pData;
+					//if (carColor->y == 1.0f)
+				}
+				if (settings.m_bExportNormalMap && matInfo.pNormal)
+				{
+					Texture *texture = (Texture *)matInfo.pNormal->m_pData;
+					fichier << "\tmap_bump " << texture->m_pszName << "\n";
+				}
+			}
+		}
+		fichier.close();
+
+
+		strcpy(tmp, modelname);
+		strcat(tmp, ".obj");
+		fichier.open(tmp);
+		for (int m = 0; m < models.size(); m++)
+		{
+			if (models[m]->m_geometries.m_pData)
+			{
+				for (int g = 0; g < models[m]->m_geometries.m_wSize; g++)
+				{
+					Geometry &rageGeom = *models[m]->m_geometries.m_pData[g];
+					VertexDeclaration &geomVertexDesclaration = *rageGeom.m_pVertexBuffer[0]->m_pDeclaration;
+
+					fichier << "\n\n";
+					// Добавляем треугольники
+
+					unsigned int gElementSizes[] = { 2, 4, 6, 8, 4, 8, 12, 16, 4, 4, 4, 0, 0, 0, 0, 0 };
+					/*if (!geomVertexDesclaration.m_bStoreNormalsDataFirst)
+					{*/
+					for (int j = 0; j < rageGeom.m_wVertexCount; j++)
+					{
+						BYTE *vertex = &rageGeom.m_pVertexBuffer[0]->m_pVertexData[j * geomVertexDesclaration.m_nTotalSize];
+						unsigned int offset = 0;
+						if (geomVertexDesclaration.m_usedElements.m_bPosition)
+						{
+							//fichier << geomVertexDesclaration.m_elementTypes.m_nPositionType <<"\n" ;
+							BYTE *vertex = &rageGeom.m_pVertexBuffer[0]->m_pVertexData[j * geomVertexDesclaration.m_nTotalSize];
+							Vector3 pos;
+							memcpy(&pos, &vertex[offset], 12);
+							offset += gElementSizes[geomVertexDesclaration.m_elementTypes.m_nPositionType];
+							fichier << "v " << pos.x << "\t" << pos.y << "\t" << pos.z << "\t\n";
+						}
+
+						if (geomVertexDesclaration.m_usedElements.m_bBlendWeight)
+						{
+							offset += gElementSizes[geomVertexDesclaration.m_elementTypes.m_nBlendWeightType];
+						}
+						if (geomVertexDesclaration.m_usedElements.m_bBlendIndices)
+						{
+							offset += gElementSizes[geomVertexDesclaration.m_elementTypes.m_nBlendIndicesType];
+						}
+						if (geomVertexDesclaration.m_usedElements.m_bNormal)
+						{
+							offset += gElementSizes[geomVertexDesclaration.m_elementTypes.m_nNormalType];
+						}
+						if (geomVertexDesclaration.m_usedElements.m_bColor)
+						{
+							offset += gElementSizes[geomVertexDesclaration.m_elementTypes.m_nColorType];
+						}
+						if (geomVertexDesclaration.m_usedElements.m_bSpecularColor)
+						{
+							offset += gElementSizes[geomVertexDesclaration.m_elementTypes.m_nSpecularColorType];
+						}
+
+						if (geomVertexDesclaration.m_usedElements.m_bTexCoord1)
+						{
+							float u, v;
+							memcpy(&u, &vertex[offset], 4);
+							memcpy(&v, &vertex[offset+4], 4);
+							fichier << "vt " << u << " " << -v << "\n";
+							offset += gElementSizes[geomVertexDesclaration.m_elementTypes.m_nTexCoord1Type];
+						}
+						/*if (geomVertexDesclaration.m_usedElements.m_bTexCoord2)
+						{
+							memcpy(&geometry.texCoords[1][vertCounter + j], &vertex[offset], 8);
+							offset += gElementSizes[geomVertexDesclaration.m_elementTypes.m_nTexCoord2Type];
+						}*/
+					}
+
+					meshCounter++;
+
+				}
+			}
+		}
+
+
+		indexCount = 1;
+		for (int m = 0; m < models.size(); m++)
+		{
+			if (models[m]->m_geometries.m_pData)
+			{
+				for (int g = 0; g < models[m]->m_geometries.m_wSize; g++)
+				{
+					Geometry &rageGeom = *models[m]->m_geometries.m_pData[g];
+					VertexDeclaration &geomVertexDesclaration = *rageGeom.m_pVertexBuffer[0]->m_pDeclaration;
+					fichier << "usemtl " << matlist[models[m]->m_pShaderMapping[g]] << "\n";
+
+					for (int i = 0; i < (rageGeom.m_dwIndexCount / 3); i++)
+					{
+						fichier << "f " << rageGeom.m_pIndexBuffer[0]->m_pIndexData[i * 3] + indexCount << "/" << rageGeom.m_pIndexBuffer[0]->m_pIndexData[i * 3] + indexCount << "\t";
+						fichier << rageGeom.m_pIndexBuffer[0]->m_pIndexData[i * 3 + 1] + indexCount << "/" << rageGeom.m_pIndexBuffer[0]->m_pIndexData[i * 3+1] + indexCount << "\t";
+						fichier << rageGeom.m_pIndexBuffer[0]->m_pIndexData[i * 3 + 2] + indexCount << "/" << rageGeom.m_pIndexBuffer[0]->m_pIndexData[i * 3+2] + indexCount << "\n";
+
+						triCount++;
+					}
+					meshCounter++;
+					indexCount += rageGeom.m_wVertexCount;
+				}
+			}
+		}
+
+		//free matlist
+		for (int mat = 0; mat < shaderGroup.m_shaders.m_wCount; mat++)
+		{
+			free(matlist[mat]);
+		}
+		free(matlist);
+
+		fichier.close();
+		return true;
+	}
+
+	static bool drawable_to_txt(Drawable *drawable, char *dstpath, char *modelname)
+	{
+		LOGL("drawable_to_txt");
+		unsigned int i, j, k,modelcount=0;
+		bool result=true;
+		char tmp[200];
+
+		ofstream fichier;
+
+
+		strcpy(tmp, modelname);
+		strcat(tmp, ".txt");
+		fichier.open(tmp);
+
+		fichier << "#######\n";
+		fichier << "Drawable name:" << drawable->m_pszName <<"("<< drawable->vtable <<")\n";
+
+		fichier.flush();
+
+		vector<Model *> models;
+		for (i = 0; i < 3; i++)
+		{
+			if (drawable->m_pModelCollection[i])
+			{
+				fichier << "\tmodel " << i << "\n";
+				for (j = 0; j < 3; j++)
+				{
+					if (drawable->m_pModelCollection[i]->m_pData[j])
+					{
+						if (modelcount < 2)
+						{
+							sprintf(tmp, "%p", drawable->m_pModelCollection[i]->m_pData[j]);
+							fichier << "\t\tgeometries " << j << " @" << tmp << " \n";
+							models.push_back(drawable->m_pModelCollection[i]->m_pData[j]);
+							modelcount++;
+						}
+						else
+						{
+							LOGL("Mesh convertion cancel");
+							sprintf(tmp, "%p", drawable->m_pModelCollection[i]->m_pData[j]);
+							fichier << "\t\tgeometries " << j << " @" << tmp << "(canceled) \n";
+						}
+						
+					}
+				}
+				fichier.flush();
+			}	
+		}
+		
+		unsigned int vertCounter = 0;
+		unsigned int indexCount = 0;
+		unsigned int meshCounter = 0;
+		unsigned int triCount = 0;
+		fichier << "nb model = " << models.size() << "\n";
+
+		for (int m = 0; m < models.size(); m++)
+		{
+			fichier << "model!!\n";
+			fichier.flush();
+			sprintf(tmp, "%p", models[m]->m_geometries.m_pData);
+			fichier << "model at "<< tmp << "\n";
+			fichier.flush();
+			if (models[m]->m_geometries.m_pData)
+			{
+
+				for (int g = 0; g < models[m]->m_geometries.m_wSize; g++)
+				{
+					Geometry &rageGeom = *models[m]->m_geometries.m_pData[g];
+					VertexDeclaration &geomVertexDesclaration = *rageGeom.m_pVertexBuffer[0]->m_pDeclaration;
+					// Меш
+					fichier << "\n\n";
+					if (&rageGeom == NULL)
+						fichier << "null!!";
+					else
+					{
+						sprintf(tmp, "%p", rageGeom);
+						fichier << "geo = " << tmp<< "\n";
+					}
+
+					for (int i = 0; i < rageGeom.m_dwIndexCount; i++)
+						fichier << rageGeom.m_pIndexBuffer[0]->m_pIndexData[i] + indexCount << "\t";
+
+					fichier << "\n\n";
+					// Добавляем треугольники
+					for (int i = 0; i < (rageGeom.m_dwIndexCount / 3); i++)
+					{
+						fichier << rageGeom.m_pIndexBuffer[0]->m_pIndexData[i * 3] + indexCount << "\t";
+						fichier << rageGeom.m_pIndexBuffer[0]->m_pIndexData[i * 3 + 1] + indexCount << "\t";
+						fichier << rageGeom.m_pIndexBuffer[0]->m_pIndexData[i * 3 + 2] + indexCount << "\t";
+						fichier << models[m]->m_pShaderMapping[g] <<"\n";
+
+						triCount++;
+					}
+					unsigned int gElementSizes[] = { 2, 4, 6, 8, 4, 8, 12, 16, 4, 4, 4, 0, 0, 0, 0, 0 };
+					/*if (!geomVertexDesclaration.m_bStoreNormalsDataFirst)
+					{*/
+					fichier << "VertexCount = " << rageGeom.m_wVertexCount << "\n";
+						for (int j = 0; j < rageGeom.m_wVertexCount; j++)
+						{
+							BYTE *vertex = &rageGeom.m_pVertexBuffer[0]->m_pVertexData[j * geomVertexDesclaration.m_nTotalSize];
+							unsigned int offset = 0;
+							if (geomVertexDesclaration.m_usedElements.m_bPosition)
+							{
+								//fichier << geomVertexDesclaration.m_elementTypes.m_nPositionType <<"\n" ;
+								Vector3 pos;
+								memcpy(&pos, &vertex[offset], 12);
+								offset += gElementSizes[geomVertexDesclaration.m_elementTypes.m_nPositionType];
+								sprintf(tmp, "%p", vertex);
+								fichier << pos.x << "\t" << pos.y << "\t" << pos.z << "\t"<< tmp << "\t\n";
+							}
+							fichier.flush();
+						}
+					fichier << "Fin vertex \n";
+					/*}
+					else
+					{
+						for (int j = 0; j < rageGeom.m_wVertexCount; j++)
+						{
+							BYTE *vertex = &rageGeom.m_pVertexBuffer[0]->m_pVertexData[j * geomVertexDesclaration.m_nTotalSize];
+							unsigned int offset = 0;
+
+						}
+					}*/
+
+					indexCount += rageGeom.m_wVertexCount;
+
+					vertCounter += rageGeom.m_wVertexCount;
+					meshCounter++;
+					fichier.flush();
+				}
+			}
+			fichier << "vertCounter=" << vertCounter << "\tindexCount=" << indexCount << "\tmeshCounter=" << meshCounter << "\ttriCount=" << triCount<<"\n";
+		}
+		//drawable->m_pModelCollection[i].m_geometries->vtable
+		fichier.close();
+
+
+		/*gtaRwClump clump;
+		skeleton_info skelInfo;
+		skelInfo.skeleton = drawable->m_pSkeleton;
+		if (settings.m_bExportSkeleton && drawable->m_pSkeleton && drawable->m_pSkeleton->m_apBones && drawable->m_pSkeleton->m_wBoneCount > 0)
+		{
+			skelInfo.exportSkeleton = true;
+			clump.Initialise(1, drawable->m_pSkeleton->m_wBoneCount + 1, 1);
+			clump.frameList.frames[0].Initialise(-1, 0);
+			for (int i = 0; i < drawable->m_pSkeleton->m_wBoneCount; i++)
+			{
+				clump.frameList.frames[i + 1].Initialise((gtaRwV3d *)&drawable->m_pSkeleton->m_apTransform[i]._11,
+					(gtaRwV3d *)&drawable->m_pSkeleton->m_apTransform[i]._21,
+					(gtaRwV3d *)&drawable->m_pSkeleton->m_apTransform[i]._31, (gtaRwV3d *)&drawable->m_pSkeleton->m_apTransform[i]._41,
+					drawable->m_pSkeleton->m_apBones[i].m_wParentBoneId + 1, 0);
+				char boneName[24];
+				if (drawable->m_pSkeleton->m_apBones[i].m_pszName)
+				{
+					strncpy(boneName, drawable->m_pSkeleton->m_apBones[i].m_pszName, 24);
+					boneName[23] = '\0';
+					clump.frameList.frames[i + 1].Extension.nodeName.Initialise(boneName);
+				}
+				else
+				{
+					sprintf(boneName, "bone_%d", i);
+					clump.frameList.frames[i + 1].Extension.nodeName.Initialise(boneName);
+				}
+				if (i == 0)
+				{
+					gtaRwFrameHAnim &hAnim = clump.frameList.frames[i + 1].Extension.hAnim;
+					hAnim.Initialise(drawable->m_pSkeleton->m_apBones[i].m_wBoneIndex, drawable->m_pSkeleton->m_wBoneCount, 0, 36);
+					for (int j = 0; j < hAnim.numNodes; j++)
+					{
+						hAnim.nodes[j].Initialise(drawable->m_pSkeleton->m_apBones[j].m_wBoneIndex, j, bone_get_flags(j, drawable->m_pSkeleton->m_apBones,
+							drawable->m_pSkeleton->m_wBoneCount));
+					}
+				}
+				else
+					clump.frameList.frames[i + 1].Extension.hAnim.Initialise(drawable->m_pSkeleton->m_apBones[i].m_wBoneIndex);
+			}
+		}
+		else
+		{
+			clump.Initialise(1, 1, 1);
+			clump.frameList.frames[0].Initialise(-1, 0);
+			clump.frameList.frames[0].Extension.nodeName.Initialise(modelname);
+		}
+		clump.atomics[0].Initialise(0, 0, rpATOMICCOLLISIONTEST | rpATOMICRENDER, false);
+		vector<Model *> models;
+		unsigned int level = get_last_available_lod_level(drawable, settings.m_nLodLevel);
+		if (drawable->m_pModelCollection[level] && drawable->m_pModelCollection[level]->m_pData)
+		{
+			for (int i = 0; i < drawable->m_pModelCollection[level]->m_wCount; i++)
+			{
+				if (drawable->m_pModelCollection[level]->m_pData[i])
+					models.push_back(drawable->m_pModelCollection[level]->m_pData[i]);
+			}
+		}
+
+		models_to_geometry(models, NULL, *drawable->m_pShaderGroup, clump.geometryList.geometries[0], skelInfo, false);
+		BoundSphere sphere;
+		BoundBox bbox;
+		bbox.Set(Vector3(drawable->m_vAabbMin), Vector3(drawable->m_vAabbMax));
+		bbox.ToSphere(&sphere);
+		memcpy(&clump.geometryList.geometries[0].morphTarget[0].boundingSphere.center, &sphere.center, 12);
+		clump.geometryList.geometries[0].morphTarget[0].boundingSphere.radius = sphere.radius;
+		add_lights_to_geometry(drawable->m_lights, NULL, NULL, clump.geometryList.geometries[0]);
+		clump_post_process(&clump, settings.m_bGenerateDayPrelight, settings.m_bGenerateNightPrelight);
+		if (clump.geometryList.geometries[0].numVertices >= 65535)
+			LOGL("  WARNING: Mesh has more than 65535 vertices (%u). Edit this model manually to prevent crashes in-game.", clump.geometryList.geometries[0].numVertices);
+		gtaRwStream *stream = gtaRwStreamOpen(rwSTREAMFILENAME, rwSTREAMWRITE, dstpath);
+		bool result = false;
+		if (stream)
+		{
+			clump.StreamWrite(stream);
+			gtaRwStreamClose(stream);
+			result = true;
+		}
+		clump.Destroy();
+
+		if (settings.m_bGenerateCollision)
+		{
+			char colpath[MAX_PATH];
+			strcpy(colpath, dstpath);
+			strcpy(&colpath[strlen(colpath) - 3], "col");
+			ColFile colFile;
+			colFile.SetModelInfo(modelname, -1);
+			models.clear();
+			unsigned int maxLodLevel = get_last_available_lod_level(drawable, 3);
+			if (drawable->m_pModelCollection[maxLodLevel] && drawable->m_pModelCollection[maxLodLevel]->m_pData)
+			{
+				for (int i = 0; i < drawable->m_pModelCollection[maxLodLevel]->m_wCount; i++)
+				{
+					if (drawable->m_pModelCollection[maxLodLevel]->m_pData[i])
+						models.push_back(drawable->m_pModelCollection[maxLodLevel]->m_pData[i]);
+				}
+			}
+			if (!models_to_collision(models, NULL, NULL, *drawable->m_pShaderGroup, colFile))
+				LOGL("  WARNING: This model has more than 32767 vertices. I will generate dummy (empty) collision model.");
+			else
+			{
+				if (settings.m_bOptimizeCollisionMesh)
+					colFile.Optimize();
+				else
+				{
+					colFile.col3.min.x = bbox.aabbMin.x;
+					colFile.col3.min.y = bbox.aabbMin.y;
+					colFile.col3.min.z = bbox.aabbMin.z;
+					colFile.col3.max.x = bbox.aabbMax.x;
+					colFile.col3.max.y = bbox.aabbMax.y;
+					colFile.col3.max.z = bbox.aabbMax.z;
+					colFile.col3.center.x = sphere.center.x;
+					colFile.col3.center.y = sphere.center.y;
+					colFile.col3.center.z = sphere.center.z;
+					colFile.col3.radius = sphere.radius;
+				}
+				if (colFile.numVertices > 32767)
+				{
+					if (settings.m_bSkipLargeCol)
+					{
+						LOGL("  WARNING: This model has more than 32767 vertices. I will generate dummy (empty) collision model.");
+						colFile.Clear();
+					}
+					else
+						LOGL("  WARNING: This model has more than 32767 vertices. You must fix it manually.");
+				}
+				else if (colFile.col3.numFaces > 32767)
+				{
+					if (settings.m_bSkipLargeCol)
+					{
+						LOGL("  WARNING: This model has more than 32767 faces. I will delete some faces so it will be a valid colmodel.");
+						colFile.col3.numFaces = 32767;
+					}
+					else
+						LOGL("  WARNING: This model has more than 32767 faces. You must fix it manually.");
+				}
+			}
+			colFile.Write(colpath);
+		}
+
+		if (drawable->m_pShaderGroup && drawable->m_pShaderGroup->m_pTxd)
+		{
+			gtaRwTexDictionary txd;
+			texture_converter::dictionary_to_txd(drawable->m_pShaderGroup->m_pTxd, &txd);
+			char txdpath[MAX_PATH];
+			strcpy(txdpath, dstpath);
+			if (strrchr(txdpath, '.'))
+				strrchr(txdpath, '.')[1] = '\0';
+			strcat(txdpath, "internal.txd");
+			gtaRwStream *txdstream = gtaRwStreamOpen(rwSTREAMFILENAME, rwSTREAMWRITE, txdpath);
+			if (txdstream)
+			{
+				txd.StreamWrite(txdstream);
+				gtaRwStreamClose(txdstream);
+			}
+		}*/
+		return result;
+	}
+
 	static bool convert_ydr_to_dff(char *srcpath, char *dstpath, char *modelname)
 	{
 		ResourceData resData(srcpath);
 		Drawable *drawable = new(resData.GetData()) Drawable(&resData);
 		return drawable_to_dff(drawable, dstpath, modelname);
+	}
+	static bool convert_ydr_to_txt(char *srcpath, char *dstpath, char *modelname)
+	{
+		ResourceData resData(srcpath);
+		Drawable *drawable = new(resData.GetData()) Drawable(&resData);
+		return drawable_to_txt(drawable, dstpath, modelname);
+	}
+	static bool convert_ydr_to_obj(char *srcpath, char *dstpath, char *modelname)
+	{
+		ResourceData resData(srcpath);
+		Drawable *drawable = new(resData.GetData()) Drawable(&resData);
+		return drawable_to_obj(drawable, dstpath, modelname);
 	}
 
 	static bool convert_ydd_to_dff(char *srcpath)
